@@ -35,6 +35,7 @@ export interface WhiteboardElement {
   fontSize?: number;   // For text elements
 }
 
+
 // 4. Room State (What the server sends to a new user when they join)
 export interface RoomState {
   slug: string;

@@ -9,7 +9,12 @@ import RoomActions from "./RoomActions";
 import { Plus, Clock, Crown, Users, Box } from "lucide-react";
 import { revalidatePath } from "next/cache";
 
-import { Room } from "@repo/database";
+interface Room {
+  id: string;
+  slug: string;
+  createdAt: Date;
+  adminId: string;
+}
 
 export default async function DashboardPage() {
   const session = await getServerSession(authOptions);
