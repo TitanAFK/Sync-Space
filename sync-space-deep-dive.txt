@@ -1,0 +1,72 @@
+# Sync-Space Deep Dive & Architecture Overview
+
+This document is designed to help you deeply understand the internal workings of "sync-space", an infinite collaborative whiteboard application. It details the architecture, data flow, synchronization mechanisms, and component responsibilities. It is your ultimate study guide for interviews and technical deep-dives.
+
+## 1. High-Level Architecture
+Sync-Space is built as a **Turborepo** monorepo containing multiple packages and applications to promote code reuse and strict separation of concerns.
+
+### 1.1. Directory Structure
+- **`apps/web/`**: The frontend application built with **Next.js 14** (App Router). It handles routing, user authentication (NextAuth), UI rendering (Tailwind CSS, Lucide icons), and the core `<canvas>` API logic for the whiteboard.
+- **`apps/server/`**: A standalone Node.js/Express server handling real-time WebSocket connections via **Socket.io**. It acts as the central hub for broadcasting drawing events, managing user cursors, and persisting room states to the database.
+- **`packages/database/`**: Contains the **Prisma ORM** definitions and database connection logic (via a singleton pattern for the client). It defines the `User`, `Room`, and `Session` schemas.
+- **`packages/types/`**: A shared library containing core TypeScript interfaces, such as `WhiteboardElement`, `Point`, and `DrawData`. This ensures that both the frontend and backend strictly adhere to the same schema for whiteboard elements.
+
+## 2. Core Concepts & Data Models
+
+### 2.1. The Whiteboard Element
+Every drawing, shape, and text entry is represented as a `WhiteboardElement`.
+Key properties include:
+- `id`: A UUID string unique to every element.
+- `type`: Enum for `pencil`, `rect`, `circle`, `line`, `arrow`, `rhombus`, or `text`.
+- `x`, `y`: The absolute coordinates on the infinite canvas.
+- `width`, `height`, `radius`: Dimensional metadata depending on the shape type.
+- `points`: An array of `Point` objects used exclusively by the `pencil` tool to track complex curves.
+- `stroke`: Color string.
+
+### 2.2. The Infinite Canvas System
+Instead of relying on DOM elements for drawings, everything is drawn directly onto an HTML5 `<canvas>` using the `CanvasRenderingContext2D`.
+- **Viewport State / Camera**: The canvas maintains a `camera` state containing `x`, `y` (pan offsets) and `zoom` (scale). 
+- **Screen-to-Canvas Mapping**: When a user clicks, the mouse coordinates (Screen logic) are transformed into absolute world coordinates (Canvas logic) using:
+  `canvas.x = (screen.x - camera.x) / camera.zoom`
+- **Redraw Loop**: Because standard canvases maintain no memory of drawn objects, any pan, zoom, or new shape triggers a full `clearRect()`. The engine then restores the transform, redraws the grid, applies the camera offset and scale, and iterates over every `WhiteboardElement` to `stroke()` or `fill()` it. This allows for an infinite, freely navigable space.
+
+## 3. Real-Time Synchronization Workflows
+
+Sync-Space relies extensively on active WebSockets (Socket.io). Here's what happens during common interactions:
+
+### 3.1. Connection and Initialization
+1. A user visits a room URL.
+2. The Next.js frontend connects to `ws://localhost:3001` with `slug` as the room identifier.
+3. The server queries the Neon PostgreSQL database via Prisma for the room's stored `elements` JSON.
+4. The server emits an `init-state` event directly to the connecting user with the current drawing state.
+
+### 3.2. Drawing Live (Pencil/Shapes)
+1. **Mouse Down**: The user clicks to draw. `startPoint` is captured. Action state set to `drawing`.
+2. **Mouse Move**: 
+   - *Pencil*: The point is pushed to `currentPointsRef`. A `draw` event is emitted. The server receives this and broadcasts `draw-client` to *all other* clients in the room, telling them to instantaneously draw a stroke from `lastPoint` to `currentPoint`.
+   - *Shapes*: The frontend emits `draw-shape` with a temporary preview of the shape. Other clients render this preview via `remotePreviews` state with lowered opacity.
+3. **Mouse Up**: The shape is completed. A final `WhiteboardElement` is constructed. It is added to local state, broadcasted via `broadcast-element` to others, and a `save-canvas` event persists the entire array to the database.
+
+### 3.3. Element Concurrency Control (Locking)
+To prevent race conditions where two users grab the exact same object and move it simultaneously:
+1. When a user clicks an element, the client emits `lock-element` with the `element.id`.
+2. The server stores this in a `roomLocks` dictionary mapping `elementId -> userId` and broadcasts it to others.
+3. Other clients update their UI to render a red `<Lock /🔒>` icon and reject drag/resize events on that element.
+4. On deselect or disconnect, `unlock-element` frees the object.
+
+### 3.4. Resizing Mechanics
+In `apps/web/app/canvas/[slug]/CanvasClient.tsx`:
+1. Resizing leverages dynamic hitboxes (`nw`, `ne`, `sw`, `se`) generated by computing the bounding box of the element (`getElementBounds`).
+2. When dragged, the `dx` and `dy` movement of the mouse recalculates the geometric bounds. 
+3. Unique algorithm required for `pencil`: It dynamically recalibrates every single drawn point inside the path proportionately to the ratio of `newWidth / oldWidth`, while clamping scales to prevent the logic from collapsing the array mathematically to 0.
+
+## 4. Authentication and NextAuth
+Sync-Space handles authentication effortlessly using `next-auth`. 
+- **OAuth Integration**: Integrates Google and GitHub strategies using `@auth/prisma-adapter`.
+- **Session Strategy**: Uses JWT (JSON Web Tokens). Upon signing in, NextAuth captures user data and saves it in the PostgreSQL database. The tokens persist standard session identifiers mapping to the User model.
+
+## 5. Potential Interview Talking Points & Challenges Solved
+
+- **Handling Ghost Strokes**: Real-time pencil curves are drawn directly to the canvas context without re-rendering the entire canvas frame for performance. Once the curve finishes, it commits to the master `elements` array, which does trigger a full clean re-render.
+- **Race conditions**: Why do we send the entire canvas array in `save-canvas` while we only send the delta in `update-element`? The database acts as a final source of truth. WebSockets push updates optimistically to peers for 0-latency UX, but the DB gets the full array to prevent data loss on simultaneous edits.
+- **Monorepo architecture advantages**: Code reuse. The `WhiteboardElement` interface is used identically by Prisma schemas, Next.js contexts, and Express payloads. Changes to the schema are caught by the TypeScript compiler locally everywhere simultaneously.
