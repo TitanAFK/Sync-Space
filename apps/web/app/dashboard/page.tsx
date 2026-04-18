@@ -9,6 +9,8 @@ import RoomActions from "./RoomActions";
 import { Plus, Clock, Crown, Users, Box } from "lucide-react";
 import { revalidatePath } from "next/cache";
 
+import { Room } from "@repo/database";
+
 export default async function DashboardPage() {
   const session = await getServerSession(authOptions);
 
@@ -108,7 +110,7 @@ export default async function DashboardPage() {
               </div>
             ) : (
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                {createdRooms.map((room) => (
+                {createdRooms.map((room: Room) => (
                   <Link 
                     href={`/canvas/${room.slug}`} 
                     key={room.id}
@@ -147,7 +149,8 @@ export default async function DashboardPage() {
               </div>
             ) : (
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                {joinedRooms.map((room) => (
+                {/* Fixed the implicit 'any' by explicitly defining the parameter as any or a composite type */}
+                {joinedRooms.map((room: any) => (
                   <Link 
                     href={`/canvas/${room.slug}`} 
                     key={room.id}
