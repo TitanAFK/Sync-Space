@@ -75,7 +75,8 @@ export default function CanvasClient({ initialDisplayName = "Guest" }: { initial
     };
   }, [selectedElementId, elements, action, slug]);
   useEffect(() => {
-    const socket = io("http://localhost:3001");
+    const socketUrl = process.env.NEXT_PUBLIC_SOCKET_URL || "http://localhost:3001";
+    const socket = io(socketUrl);
     socketRef.current = socket;
 
     socket.on("connect", () => socket.emit("join-room", slug));
@@ -374,14 +375,6 @@ export default function CanvasClient({ initialDisplayName = "Guest" }: { initial
         const clickedEl = [...elements].reverse().find(el => 
             isPointInBounds(canvasPos, getElementBounds(el))
         );
-
-        if (clickedEl && clickedEl.type === "text" && e.detail === 2) {
-             setAction("writing");
-             setTextInput({ x: clickedEl.x, y: clickedEl.y, text: clickedEl.text || "", id: clickedEl.id });
-             socketRef.current?.emit("lock-element", { slug, id: clickedEl.id });
-             setSelectedElementId(null);
-             return;
-        }
 
         if (clickedEl) {
             if (lockedElements[clickedEl.id] && lockedElements[clickedEl.id] !== socketRef.current?.id) {
@@ -796,6 +789,19 @@ export default function CanvasClient({ initialDisplayName = "Guest" }: { initial
         onMouseLeave={() => {
             if (action === "drawing" || action === "moving" || action === "resizing") {
                 handleMouseUp({ clientX: lastMousePosRef.current?.x ?? 0, clientY: lastMousePosRef.current?.y ?? 0 } as any);
+            }
+        }}
+        onDoubleClick={(e) => {
+            if (selectedTool !== "select") return;
+            const canvasPos = getCanvasCoords(e);
+            const clickedEl = [...elements].reverse().find(el => 
+                isPointInBounds(canvasPos, getElementBounds(el))
+            );
+            if (clickedEl && clickedEl.type === "text") {
+                 setAction("writing");
+                 setTextInput({ x: clickedEl.x, y: clickedEl.y, text: clickedEl.text || "", id: clickedEl.id });
+                 socketRef.current?.emit("lock-element", { slug, id: clickedEl.id });
+                 setSelectedElementId(null);
             }
         }}
       />
