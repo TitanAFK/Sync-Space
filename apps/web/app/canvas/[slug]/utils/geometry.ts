@@ -30,9 +30,11 @@ export const getElementBounds = (element: WhiteboardElement) => {
       if (p.y > maxY) maxY = p.y;
     });
   } else if (element.type === 'text') {
-    // estimate text bounds based on arbitrary reasonable defaults, until real measure bounds
-    maxX = element.x + (element.text?.length || 10) * 10;
-    maxY = element.y + (element.fontSize || 24);
+    const fontSize = element.fontSize || 24;
+    const lines = (element.text || "").split('\n');
+    const maxLineLength = Math.max(1, ...lines.map(l => l.length));
+    maxX = element.x + (maxLineLength * (fontSize * 0.6));
+    maxY = element.y + (lines.length * fontSize * 1.2);
   }
 
   return {

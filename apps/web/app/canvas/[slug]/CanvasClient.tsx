@@ -451,6 +451,27 @@ export default function CanvasClient({ initialDisplayName = "Guest" }: { initial
                      const dist = dx > dy ? dx : dy;
                      const sign = (resizeHandle === 'se' || resizeHandle === 'ne') ? 1 : -1;
                      updated.radius = Math.max(5, (updated.radius || 0) + (dist * sign));
+                } else if (updated.type === "text") {
+                     const bounds = getElementBounds(el);
+                     const oldHeight = bounds.maxY - bounds.minY;
+                     let newHeight = oldHeight;
+                     
+                     if (resizeHandle === 'nw' || resizeHandle === 'ne') {
+                         newHeight = oldHeight - dy;
+                     } else {
+                         newHeight = oldHeight + dy;
+                     }
+                     
+                     const scaleY = oldHeight > 0 ? newHeight / oldHeight : 1;
+                     updated.fontSize = Math.max(8, (updated.fontSize || 24) * scaleY);
+
+                     if (resizeHandle === 'nw') {
+                         updated.x += dx; updated.y += dy;
+                     } else if (resizeHandle === 'ne') {
+                         updated.y += dy;
+                     } else if (resizeHandle === 'sw') {
+                         updated.x += dx;
+                     }
                 } else if (updated.type === "pencil" && updated.points) {
                     const bounds = getElementBounds(el);
                     const oldMinX = bounds.minX;
