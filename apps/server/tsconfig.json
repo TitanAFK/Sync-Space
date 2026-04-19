@@ -1,9 +1,9 @@
 {
   "compilerOptions": {
     "target": "ESNext",
-    "module": "NodeNext",
-    "moduleResolution": "NodeNext",
+    "module": "CommonJS",
     "lib": ["ESNext"],
+    "moduleResolution": "node",
     "esModuleInterop": true,
     "forceConsistentCasingInFileNames": true,
     "strict": true,
@@ -14,6 +14,12 @@
       "@repo/types": ["../../packages/types/src"],
       "@repo/database": ["../../packages/database/src"]
     }
+  },
+  "ts-node": {
+    "esm": false,
+    "experimentalSpecifierResolution": "node",
+    "transpileOnly": true,
+    "preferTsExts": true
   },
   "include": ["src/**/*"],
   "exclude": ["node_modules", "dist"]
